@@ -1,0 +1,15 @@
+private/
+data/
+input/
+output/
+outputs/
+*.xlsx
+*.xls
+*.csv
+!sample_data/*.csv
+!sample_data/*.xlsx
+__pycache__/
+.venv/
+.env
+*.duckdb
+.DS_Store
