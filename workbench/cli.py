@@ -24,6 +24,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--engagement", default="", help="engagement name for the Cover sheet")
     run.add_argument("--force", action="store_true", help="continue even if the integrity gate fails (recorded)")
     run.add_argument("--packs", type=Path, default=None, help="packs folder (default: bundled packs)")
+    rv = sub.add_parser("review", help="open the local review screen for a run's output folder (needs .[review])")
+    rv.add_argument("out", type=Path, help="the --out folder of a previous run")
+    rv.add_argument("--port", type=int, default=8501)
     return parser
 
 
@@ -34,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
         return _validate(args)
     if args.command == "run":
         return _run(args)
+    if args.command == "review":
+        return _review(args)
     parser.print_help()
     return 1
 
@@ -62,3 +67,50 @@ def _run(args) -> int:
     for line in outcome.messages:
         print(line)
     return 0 if outcome.status == "ok" else 1
+
+
+OFFLINE_FLAGS = [
+    "--browser.gatherUsageStats=false",
+    "--server.address=localhost",
+    "--server.headless=true",
+    "--client.toolbarMode=minimal",
+    "--global.developmentMode=false",
+]
+
+
+def _streamlit_available() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("streamlit") is not None
+
+
+def review_command(out: Path, port: int = 8501) -> tuple[list[str], dict]:
+    """The exact command and environment used to launch the review screen, offline settings forced."""
+    import os
+    import sys
+
+    app = Path(__file__).with_name("review_app.py")
+    cmd = [sys.executable, "-m", "streamlit", "run", str(app), *OFFLINE_FLAGS, f"--server.port={port}"]
+    env = dict(os.environ)
+    env["WORKBENCH_REVIEW_DIR"] = str(Path(out).resolve())
+    env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+    env["STREAMLIT_SERVER_ADDRESS"] = "localhost"
+    return cmd, env
+
+
+def _review(args) -> int:
+    import subprocess
+
+    from workbench.review import ReviewError, current_path
+
+    try:
+        current_path(args.out)
+    except ReviewError as exc:
+        print(exc)
+        return 1
+    if not _streamlit_available():
+        print("The review screen is an optional extra. Install it with: pip install .[review]")
+        return 1
+    cmd, env = review_command(args.out, args.port)
+    print(f"Review screen: http://localhost:{args.port}  (Ctrl+C to stop; runs only on this computer)")
+    return subprocess.call(cmd, env=env)

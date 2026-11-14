@@ -1,0 +1,15 @@
+# Review screen settings. The tool is offline by design: no usage statistics,
+# and the server only listens on this computer. `workbench review` forces the
+# same values on the command line, so they apply from any folder.
+[browser]
+gatherUsageStats = false
+
+[server]
+address = "localhost"
+headless = true
+
+[client]
+toolbarMode = "minimal"
+
+[global]
+developmentMode = false

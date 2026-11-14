@@ -46,6 +46,23 @@ pytest
 
 Set `config.yaml` materiality for your engagement before relying on the bands.
 
+## Review screen (optional)
+
+A local web page for working through a run's exceptions: filter by test, band, label and
+review status, read each exception, and record **your** disposition, note, name and date.
+
+```bash
+pip install -e .[review]
+workbench review output/retail
+```
+
+- It runs only on this computer (`localhost`) with Streamlit usage statistics switched off;
+  tests check that neither the server nor the page contacts anything else.
+- It never suggests or pre-selects a disposition.
+- Decisions are saved to `workpaper_reviewed.xlsx` next to the original, filling only the four
+  review columns, with one change-history line per decision in its Run log sheet. The original
+  `workpaper.xlsx` is never modified. Excel remains the official workpaper.
+
 ## Test packs (v0.1)
 
 | ID | Pack | Looks for | Initial label |
@@ -85,7 +102,8 @@ gitignored `private/` folder), validate it, and run. **Never commit real data**
 ## Project layout
 
 ```
-workbench/   engine: cli, mapping, sources, loader, integrity, runner, materiality, workpaper, runlog, pipeline
+workbench/   engine: cli, mapping, sources, loader, integrity, runner, materiality, workpaper, runlog, pipeline,
+             review + review_app (optional review screen)
 packs/       test packs (folder = meta.yaml + test.sql)
 mappings/    commented example mappings
 sample_data/ synthetic data + planted issues
