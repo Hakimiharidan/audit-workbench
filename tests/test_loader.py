@@ -85,12 +85,27 @@ def test_decimal_type_is_exact(small_project):
     assert con.execute("SELECT any_value(typeof(value)), sum(value) FROM ds_orders").fetchone() == ("DECIMAL(18,2)", Decimal("360.50"))
 
 
-def test_rounding_beyond_two_places_is_logged(tmp_path):
-    write_csv(tmp_path / "x.csv", ["Amt"], [["1.005"], ["2.00"]])
+def test_float_noise_rounded_and_logged(tmp_path):
+    write_csv(tmp_path / "x.csv", ["Amt"], [["12.3400000001"], ["2.00"], ["0.30000000000000004"]])
     m = {"mapping_version": 1, "datasets": {"x": {"source": {"file": "x.csv"}, "columns": {
         "amt": {"from": "Amt", "type": "decimal"}}}}}
     con, res = load(write_yaml(tmp_path / "m.yaml", m), m)
-    assert any("rounded" in c and "amt" in c for c in res.datasets["x"].coercions)
+    d = res.datasets["x"]
+    assert d.unparseable == {}
+    assert any("amt: 2 value(s) rounded" in c and "float noise" in c for c in d.coercions)
+    assert [r[0] for r in con.execute("SELECT amt FROM ds_x ORDER BY _row").fetchall()] == [
+        Decimal("12.34"), Decimal("2.00"), Decimal("0.30")]
+
+
+def test_genuine_third_decimal_is_unparseable(tmp_path):
+    write_csv(tmp_path / "x.csv", ["Amt"], [["12.345"], ["2.00"], ["1.0001"]])
+    m = {"mapping_version": 1, "datasets": {"x": {"source": {"file": "x.csv"}, "columns": {
+        "amt": {"from": "Amt", "type": "decimal"}}}}}
+    con, res = load(write_yaml(tmp_path / "m.yaml", m), m)
+    d = res.datasets["x"]
+    assert d.unparseable == {"amt": [2, 4]}
+    assert not any("rounded" in c for c in d.coercions)
+    assert con.execute("SELECT amt FROM ds_x WHERE _row = 2").fetchone()[0] is None
 
 
 def test_excel_values_converted_and_counted(tmp_path):

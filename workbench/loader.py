@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
 import pandas as pd
@@ -86,6 +87,39 @@ def _cast_expr(col: str, ftype: str, fmt: str | None) -> str:
     raise ValueError(f"unsupported type {ftype}")
 
 
+NOISE = Decimal("0.000001")
+CENT = Decimal("0.01")
+# Marker text for a value that must count as unparseable; no cast accepts it.
+_REJECT = "\x00excess-precision"
+
+
+def _check_precision(values: list) -> tuple[list, int]:
+    """Decimals must have at most 2 places. Float noise (|v - round(v, 2)| < 1e-6) is rounded and
+    counted; a genuine extra digit (12.345) is made unparseable so the gate fails on it."""
+    out, noise = [], 0
+    for v in values:
+        if v is None:
+            out.append(v)
+            continue
+        try:
+            dec = Decimal(v)
+        except (InvalidOperation, ValueError):
+            out.append(v)                      # left for TRY_CAST to reject
+            continue
+        if not dec.is_finite():
+            out.append(_REJECT)
+            continue
+        rounded = dec.quantize(CENT, rounding=ROUND_HALF_UP)
+        if rounded == dec:
+            out.append(v)
+        elif abs(dec - rounded) < NOISE:
+            out.append(str(rounded))
+            noise += 1
+        else:
+            out.append(_REJECT)
+    return out, noise
+
+
 def load_datasets(con, mapping: dict, mapping_path: Path) -> LoadResult:
     files: dict[str, FileInfo] = {}
     out: dict[str, DatasetLoad] = {}
@@ -133,6 +167,11 @@ def load_datasets(con, mapping: dict, mapping_path: Path) -> LoadResult:
             n_null = sum(1 for v in values if v is None)
             if n_null:
                 d.nulls[f] = n_null
+            if d.fields[f] == "decimal":
+                values, noise = _check_precision(values)
+                if noise:
+                    d.coercions.append(
+                        f"{f}: {noise} value(s) rounded to 2 decimal places (float noise below 0.000001)")
             data[f] = values
             for kind, n in sorted(raw.coercions.get(col, {}).items()):
                 d.coercions.append(f"{f}: {n} cell(s) {kind}")
@@ -154,13 +193,6 @@ def load_datasets(con, mapping: dict, mapping_path: Path) -> LoadResult:
             ).fetchall()
             if bad:
                 d.unparseable[f] = [r[0] for r in bad]
-            if ftype == "decimal":
-                n = con.execute(
-                    f"SELECT count(*) FROM {qi(raw_name)} WHERE {expr} IS NOT NULL "
-                    f"AND TRY_CAST(CAST({qi(f)} AS VARCHAR) AS DECIMAL(38,10)) <> {expr}"
-                ).fetchone()[0]
-                if n:
-                    d.coercions.append(f"{f}: {n} value(s) rounded to 2 decimal places")
         con.unregister(raw_name)
         d.loaded_rows = con.execute(f"SELECT count(*) FROM {qi(d.table)}").fetchone()[0]
         d.status = "loaded"
