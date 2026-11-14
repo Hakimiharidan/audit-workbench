@@ -56,6 +56,12 @@ pip install -e .[review]
 workbench review output/retail
 ```
 
+![Overview: band mix per test, review progress, summary](docs/img/review_overview.png)
+
+![Exceptions: filters, exception table and the reviewer's disposition form](docs/img/review_exceptions.png)
+
+*Screenshots use the synthetic retail sample data.*
+
 - It runs only on this computer (`localhost`) with Streamlit usage statistics switched off;
   tests check that neither the server nor the page contacts anything else.
 - It never suggests or pre-selects a disposition.
