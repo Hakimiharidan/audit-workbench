@@ -228,7 +228,7 @@ def _validate_dataset_links(c: _Collector, name: str, ds: dict, fields_by_ds: di
     if "control_totals" in ds:
         _need_fields(c, f"{base}.control_totals", ds["control_totals"], fields)
         for f in ds["control_totals"] or []:
-            if f in fields and fields[f] not in ("decimal", "integer"):
+            if f in fields and fields[f] not in ("decimal", "integer", "ratio"):
                 c.add(f"{base}.control_totals", f"'{f}' is {fields[f]}, not a number", "list decimal or integer fields")
     bc = ds.get("balance_check")
     if bc is not None:

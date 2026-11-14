@@ -76,6 +76,8 @@ def _cast_expr(col: str, ftype: str, fmt: str | None) -> str:
         return f"TRY_CAST({c} AS BIGINT)"
     if ftype == "decimal":
         return f"TRY_CAST({c} AS DECIMAL(18,2))"
+    if ftype == "ratio":
+        return f"TRY_CAST({c} AS DECIMAL(18,6))"
     if ftype == "date":
         if fmt:
             lit = "'" + fmt.replace("'", "''") + "'"
@@ -87,15 +89,17 @@ def _cast_expr(col: str, ftype: str, fmt: str | None) -> str:
     raise ValueError(f"unsupported type {ftype}")
 
 
-NOISE = Decimal("0.000001")
-CENT = Decimal("0.01")
+PLACES = {"decimal": 2, "ratio": 6}
+NOISE = {2: Decimal("0.000001"), 6: Decimal("0.000000001")}
 # Marker text for a value that must count as unparseable; no cast accepts it.
 _REJECT = "\x00excess-precision"
 
 
-def _check_precision(values: list) -> tuple[list, int]:
-    """Decimals must have at most 2 places. Float noise (|v - round(v, 2)| < 1e-6) is rounded and
-    counted; a genuine extra digit (12.345) is made unparseable so the gate fails on it."""
+def _check_precision(values: list, places: int = 2) -> tuple[list, int]:
+    """Decimals must have at most `places` places (2 for decimal, 6 for ratio). Float noise
+    (|v - round(v)| < 1e-6, or 1e-9 for ratio) is rounded and counted; a genuine extra digit
+    (12.345 as a decimal) is made unparseable so the gate fails on it."""
+    quantum = Decimal(1).scaleb(-places)
     out, noise = [], 0
     for v in values:
         if v is None:
@@ -109,10 +113,10 @@ def _check_precision(values: list) -> tuple[list, int]:
         if not dec.is_finite():
             out.append(_REJECT)
             continue
-        rounded = dec.quantize(CENT, rounding=ROUND_HALF_UP)
+        rounded = dec.quantize(quantum, rounding=ROUND_HALF_UP)
         if rounded == dec:
             out.append(v)
-        elif abs(dec - rounded) < NOISE:
+        elif abs(dec - rounded) < NOISE[places]:
             out.append(str(rounded))
             noise += 1
         else:
@@ -167,11 +171,12 @@ def load_datasets(con, mapping: dict, mapping_path: Path) -> LoadResult:
             n_null = sum(1 for v in values if v is None)
             if n_null:
                 d.nulls[f] = n_null
-            if d.fields[f] == "decimal":
-                values, noise = _check_precision(values)
+            if d.fields[f] in PLACES:
+                places = PLACES[d.fields[f]]
+                values, noise = _check_precision(values, places)
                 if noise:
                     d.coercions.append(
-                        f"{f}: {noise} value(s) rounded to 2 decimal places (float noise below 0.000001)")
+                        f"{f}: {noise} value(s) rounded to {places} decimal places (float noise below {NOISE[places]})")
             data[f] = values
             for kind, n in sorted(raw.coercions.get(col, {}).items()):
                 d.coercions.append(f"{f}: {n} cell(s) {kind}")

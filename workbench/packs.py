@@ -11,7 +11,11 @@ import yaml
 ASSERTIONS = {"existence", "completeness", "accuracy", "occurrence", "cutoff", "classification"}
 CATEGORIES = {"itgc", "financial", "analytical"}
 LABELS = {"likely_error", "inquiry", "control_deficiency"}
-FIELD_TYPES = {"string", "integer", "decimal", "date", "boolean"}
+FIELD_TYPES = {"string", "integer", "decimal", "ratio", "date", "boolean"}
+SQL_TYPES = {
+    "string": "VARCHAR", "integer": "BIGINT", "decimal": "DECIMAL(18,2)",
+    "ratio": "DECIMAL(18,6)", "date": "DATE", "boolean": "BOOLEAN",
+}
 PARAM_TYPES = {
     "integer", "decimal", "string", "boolean",
     "string_list", "integer_list", "field_list", "date_list_file",

@@ -140,3 +140,12 @@ def test_sandbox_blocks_file_read(small_project):
         con.execute(f"SELECT * FROM read_csv('{root / 'data' / 'po.csv'}')")
     with pytest.raises(duckdb.Error):
         con.execute("SET enable_external_access = true")
+
+
+def test_ratio_type_keeps_six_places(tmp_path):
+    write_csv(tmp_path / "x.csv", ["R"], [["0.015"], ["0.0125"], ["0.1234567"]])
+    m = {"mapping_version": 1, "datasets": {"x": {"source": {"file": "x.csv"}, "columns": {
+        "r": {"from": "R", "type": "ratio"}}}}}
+    con, res = load(write_yaml(tmp_path / "m.yaml", m), m)
+    assert res.datasets["x"].unparseable == {"r": [4]}
+    assert con.execute("SELECT r FROM ds_x WHERE _row = 2").fetchone()[0] == Decimal("0.015000")

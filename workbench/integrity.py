@@ -43,7 +43,7 @@ def _fmt(v) -> str | None:
     if v is None:
         return None
     if isinstance(v, Decimal):
-        return f"{v:.2f}"
+        return f"{v:.2f}" if v == v.quantize(Decimal("0.01")) else format(v.normalize(), "f")
     if hasattr(v, "isoformat"):
         return v.isoformat()
     return str(v)
