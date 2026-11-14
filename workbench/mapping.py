@@ -322,6 +322,10 @@ def _validate_run(c: _Collector, i: int, run, packs: dict, fields_by_ds: dict, s
         c.add(f"{base}.params", "must be a mapping", "e.g. params: {tolerance: 1.00}")
         return
     declared = pack.meta.get("parameters") or {}
+    for pname, spec in declared.items():
+        if isinstance(spec, dict) and spec.get("required") and spec.get("default") is None and pname not in params:
+            c.add(f"{base}.params", f"pack '{key}' needs parameter '{pname}' ({spec.get('type')})",
+                  f"add '{pname}: ...' under params")
     for pname, value in params.items():
         ppath = f"{base}.params.{pname}"
         if pname not in declared:
