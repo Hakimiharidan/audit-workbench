@@ -1,0 +1,20 @@
+id: ITGC-02
+name: Segregation of duties
+objective: Identify records raised (initiated) and approved by the same person.
+assertion: classification
+risk: >
+  One person can both create and approve a transaction, so an error or an
+  irregular transaction can pass without independent review.
+category: itgc
+contract:
+  records:
+    required: {record_id: string, initiator: string, approver: string}
+    optional: {amount: decimal, date: date}
+parameters: {}
+amount_column: amount_at_risk
+initial_label: control_deficiency
+needs_client_confirmation: false
+limitations: >
+  Compares identifiers only. Two different identifiers used by the same person,
+  or a delegated approval recorded under another name, are not detected. Records
+  with an empty initiator or approver are not flagged here.

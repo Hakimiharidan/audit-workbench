@@ -1,0 +1,27 @@
+id: ITGC-01
+name: Leaver activity
+objective: >
+  Identify activity recorded under a person after their leave date, and people
+  who have a leave date but are still shown with an active status.
+assertion: occurrence
+risk: >
+  Access of leavers is not removed on time, so transactions can be recorded
+  under their identity after they have left (access management ITGC).
+category: itgc
+contract:
+  events:                       # transactions or log entries done by a person
+    required: {event_id: string, actor: string, event_date: date}
+    optional: {amount: decimal}
+  people:                       # HR / user master
+    required: {person_id: string, leave_date: date, status: string}
+parameters:
+  active_values: {type: string_list, default: ["Active"]}
+amount_column: amount_at_risk
+initial_label: control_deficiency
+needs_client_confirmation: false
+limitations: >
+  Relies on the leave date and status in the people data being complete and
+  correct. An event dated after the leave date may be a back-dated correction or
+  a shared login; it needs inquiry before it is treated as an error. Events whose
+  actor is not in the people data are not tested here (see the integrity gate's
+  reference checks).
