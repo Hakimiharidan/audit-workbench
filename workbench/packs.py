@@ -169,3 +169,16 @@ def check_select_only(sql: str) -> None:
         raise PackError(f"test.sql must contain exactly one statement, found {len(statements)}")
     if statements[0].type != duckdb.StatementType.SELECT:
         raise PackError(f"test.sql must be a SELECT, found {statements[0].type.name}")
+
+
+_PLACEHOLDER = __import__("re").compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def check_pack_sql(pack: Pack) -> None:
+    """Check a pack's SQL parses as one SELECT, with field_list placeholders filled by a dummy field."""
+    field_lists = {n for n, s in (pack.meta.get("parameters") or {}).items()
+                   if isinstance(s, dict) and s.get("type") == "field_list"}
+    for name in _PLACEHOLDER.findall(pack.sql):
+        if name not in field_lists:
+            raise PackError(f"'{{{{{name}}}}}' is not a field_list parameter")
+    check_select_only(_PLACEHOLDER.sub('"_field"', pack.sql))

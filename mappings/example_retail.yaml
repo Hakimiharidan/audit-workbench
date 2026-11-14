@@ -1,0 +1,182 @@
+# Example mapping: synthetic retail extract (sample_data/retail.xlsx).
+#
+# A mapping has two layers:
+#   1. datasets: which file/sheet/column fills which field, the field types, and
+#      the keys and relations the integrity gate checks.
+#   2. runs:     which test packs to run, and how each pack's input roles and
+#      fields are bound to the datasets above.
+# Copy this file, change the source names on the right-hand side, and check it
+# with:  workbench validate-mapping your_mapping.yaml
+#
+# File paths are relative to this mapping file's folder.
+
+mapping_version: 1                    # always 1 for this version of the tool
+
+# Text values that mean "no value". They become NULL and every conversion is
+# counted and shown on the Integrity sheet. Nothing else is converted silently.
+null_placeholders: ["N/A", ""]
+
+datasets:
+
+  customers:                          # dataset name (your choice; used below)
+    source: {file: ../sample_data/retail.xlsx, sheet: Clients}
+    columns:                          # field: {from: source header, type: ...}
+      customer_id: {from: ClientCode, type: string}
+      # ClientName, Mobile and BirthDate are personal data the tests do not
+      # need. They are not mapped, so they are never loaded (their names are
+      # listed as "ignored" on the Integrity sheet).
+    primary_key: [customer_id]        # duplicates here fail the gate
+    expected_rows: 300                # record count reported with the extract (optional)
+
+  employees:
+    source: {file: ../sample_data/retail.xlsx, sheet: Staff}
+    columns:
+      employee_id:     {from: StaffCode,        type: string}
+      position:        {from: Role,             type: string}
+      join_date:       {from: Joined,           type: date}
+      leave_date:      {from: Left,             type: date}    # "N/A" for current staff -> NULL (counted)
+      status:          {from: EmploymentStatus, type: string}
+      commission_rate: {from: CommRate,         type: ratio}   # ratio = up to 6 decimal places (0.015)
+    primary_key: [employee_id]
+    expected_rows: 10
+
+  products:
+    source: {file: ../sample_data/retail.xlsx, sheet: Items}
+    columns:
+      product_id:   {from: ItemCode,  type: string}
+      product_name: {from: ItemName,  type: string}
+      list_price:   {from: UnitPrice, type: decimal}           # decimal = money, exactly 2 places
+    primary_key: [product_id]
+    control_totals: []                # list prices are not a meaningful total
+    expected_rows: 20
+
+  sales:
+    source: {file: ../sample_data/retail.xlsx, sheet: Receipts}
+    columns:
+      sale_id:        {from: ReceiptNo,   type: string}
+      sale_date:      {from: ReceiptDate, type: date}
+      customer_id:    {from: ClientCode,  type: string}        # mostly "N/A" (walk-in) -> NULL
+      payment_method: {from: Tender,      type: string}
+      quantity:       {from: Units,       type: integer}
+      total_amount:   {from: GrossAmount, type: decimal}
+      employee_id:    {from: CashierCode, type: string}
+    primary_key: [sale_id]
+    references:                       # foreign keys; checked in both directions
+      - {fields: [customer_id], to: customers, to_fields: [customer_id]}
+      - {fields: [employee_id], to: employees, to_fields: [employee_id]}
+    sequence: {field: sale_id, pattern: '^R(\d+)$'}   # gaps in R00001, R00002, ... are listed
+    control_totals: [total_amount]    # sum shown on the Integrity sheet
+    expected_rows: 1482
+
+  sale_lines:
+    source: {file: ../sample_data/retail.xlsx, sheet: ReceiptItems}
+    columns:
+      sale_id:    {from: ReceiptNo, type: string}
+      product_id: {from: ItemCode,  type: string}
+    references:
+      # require_children: a sale with no lines is a warning, not just information
+      - {fields: [sale_id], to: sales, to_fields: [sale_id], require_children: true}
+      - {fields: [product_id], to: products, to_fields: [product_id]}
+    expected_rows: 2955
+
+  commissions:
+    source: {file: ../sample_data/retail.xlsx, sheet: Payouts}
+    columns:
+      sale_id:           {from: ReceiptNo,    type: string}
+      employee_id:       {from: StaffCode,    type: string}
+      commission_amount: {from: PayoutAmount, type: decimal}
+    primary_key: [sale_id]
+    references:
+      - {fields: [sale_id], to: sales, to_fields: [sale_id]}
+      - {fields: [employee_id], to: employees, to_fields: [employee_id]}
+    expected_rows: 1488
+
+  purchase_orders:
+    source: {file: ../sample_data/retail.xlsx, sheet: POs}
+    columns:
+      order_id:    {from: PONumber,    type: string}
+      order_date:  {from: PODate,      type: date}
+      quantity:    {from: TotalUnits,  type: integer}
+      raised_by:   {from: RaisedBy,    type: string}
+      approved_by: {from: SignedOffBy, type: string}
+    primary_key: [order_id]
+    references:
+      - {fields: [raised_by], to: employees, to_fields: [employee_id]}
+      - {fields: [approved_by], to: employees, to_fields: [employee_id]}
+    expected_rows: 25
+
+  purchase_order_lines:
+    source: {file: ../sample_data/retail.xlsx, sheet: POItems}
+    columns:
+      order_id:   {from: PONumber, type: string}
+      product_id: {from: ItemCode, type: string}
+      quantity:   {from: Units,    type: integer}
+    primary_key: [order_id, product_id]
+    references:
+      - {fields: [order_id], to: purchase_orders, to_fields: [order_id], require_children: true}
+      - {fields: [product_id], to: products, to_fields: [product_id]}
+    expected_rows: 336
+
+runs:
+
+  # Each run: a unique id (also the workpaper sheet name, max 31 characters),
+  # the pack folder under packs/, a binding for every role in the pack's
+  # contract (see the pack's meta.yaml), and optional parameter overrides.
+
+  - id: ITGC-01
+    pack: itgc/leaver_activity
+    bind:
+      events:                         # role -> dataset
+        dataset: sales
+        fields: {event_id: sale_id, actor: employee_id, event_date: sale_date, amount: total_amount}
+      people:
+        dataset: employees
+        fields: {person_id: employee_id, leave_date: leave_date, status: status}
+    params:
+      active_values: ["Active"]       # statuses that mean "still employed"
+
+  - id: ITGC-02
+    pack: itgc/segregation_of_duties
+    bind:
+      records:
+        dataset: purchase_orders
+        fields: {record_id: order_id, initiator: raised_by, approver: approved_by, date: order_date}
+
+  - id: REV-01
+    pack: general/duplicates
+    bind:
+      records:
+        dataset: sales
+        fields: {record_id: sale_id, date: sale_date, amount: total_amount}
+    params:
+      # same date (+/- tolerance) and same values in all of these fields;
+      # names can be contract fields (amount) or other fields of the bound dataset
+      key_fields: [customer_id, amount, employee_id]
+      date_tolerance_days: 0
+
+  - id: REV-02
+    pack: general/sequence_gaps_orphans
+    bind:
+      sequence:
+        dataset: sales
+        fields: {id: sale_id}
+      children:
+        dataset: commissions
+        fields: {parent_id: sale_id, amount: commission_amount}
+    params:
+      id_pattern: '^R(\d+)$'
+
+  - id: PAY-01
+    pack: examples/commission_recalc_attribution
+    bind:
+      sales:
+        dataset: sales
+        fields: {sale_id: sale_id, employee_id: employee_id, total_amount: total_amount}
+      commissions:
+        dataset: commissions
+        fields: {sale_id: sale_id, employee_id: employee_id, commission_amount: commission_amount}
+      people:
+        dataset: employees
+        fields: {person_id: employee_id, commission_rate: commission_rate}
+    params:
+      tolerance: "1.00"               # absolute difference allowed before a row is listed

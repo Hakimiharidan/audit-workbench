@@ -1,0 +1,6 @@
+# Materiality for the run. These are illustrative defaults: set them for your
+# engagement before relying on the bands in the workpaper.
+materiality:
+  overall: 50000            # overall materiality, in the currency of the data
+  performance_pct: 0.75     # performance materiality = overall x 0.75
+  clearly_trivial_pct: 0.05 # clearly trivial threshold = overall x 0.05

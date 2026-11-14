@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from workbench.packs import FIELD_TYPES, PackError, discover_packs, validate_meta
+from workbench.packs import FIELD_TYPES, PackError, check_pack_sql, discover_packs, validate_meta
 from workbench.sources import SourceError, list_sheets, read_header, is_excel
 
 DEFAULT_PLACEHOLDERS = ["N/A", ""]
@@ -225,7 +225,7 @@ def _validate_dataset_links(c: _Collector, name: str, ds: dict, fields_by_ds: di
                     c.add(f"{base}.sequence.pattern", "needs exactly one capture group around the number", "e.g. '^S(\\d+)$'")
             except re.error as exc:
                 c.add(f"{base}.sequence.pattern", f"invalid regex: {exc}", "e.g. '^S(\\d+)$'")
-    if "control_totals" in ds:
+    if "control_totals" in ds and ds["control_totals"] != []:     # [] = no sums wanted
         _need_fields(c, f"{base}.control_totals", ds["control_totals"], fields)
         for f in ds["control_totals"] or []:
             if f in fields and fields[f] not in ("decimal", "integer", "ratio"):
@@ -272,6 +272,10 @@ def _validate_run(c: _Collector, i: int, run, packs: dict, fields_by_ds: dict, s
         return
     for p in validate_meta(pack.meta):
         c.add(f"{base}.pack", f"pack '{key}' meta.yaml: {p}", "fix the pack's meta.yaml")
+    try:
+        check_pack_sql(pack)
+    except PackError as exc:
+        c.add(f"{base}.pack", f"pack '{key}' test.sql: {exc}", "test.sql must be a single SELECT statement")
     contract = pack.roles()
     bind = run.get("bind") or {}
     if not isinstance(bind, dict):

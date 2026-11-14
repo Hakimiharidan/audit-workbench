@@ -1,0 +1,49 @@
+# Example mapping: synthetic general ledger (sample_data/gl.csv).
+# Same engine, different dataset: one dataset, one run (JE-01).
+# Check it with:  workbench validate-mapping mappings/example_gl.yaml
+# File paths are relative to this mapping file's folder.
+
+mapping_version: 1
+null_placeholders: ["N/A", ""]
+
+datasets:
+
+  journal_lines:
+    source: {file: ../sample_data/gl.csv}       # CSV: no sheet needed
+    columns:
+      je_id:        {from: JrnlRef,   type: string}
+      line_no:      {from: Ln,        type: integer}
+      posting_date: {from: PostDate,  type: date}    # ISO dates; for 31/12/2025 add  format: "%d/%m/%Y"
+      account:      {from: Acct,      type: string}
+      amount:       {from: Amt,       type: decimal} # signed: debit positive, credit negative
+      description:  {from: Narrative, type: string}
+      posted_by:    {from: Poster,    type: string}
+      source:       {from: Src,       type: string}
+    primary_key: [je_id, line_no]
+    # Every journal must sum to zero. If one does not, the gate fails with
+    # "possible incomplete extract" (lines may be missing).
+    balance_check: {group_by: [je_id], amount: amount, tolerance: 0.01}
+    control_totals: [amount]
+    expected_rows: 919
+
+runs:
+
+  - id: JE-01
+    pack: gl/unusual_postings
+    bind:
+      lines:
+        dataset: journal_lines
+        fields:
+          je_id: je_id
+          line_no: line_no
+          posting_date: posting_date
+          amount: amount
+          account: account
+          description: description
+          posted_by: posted_by
+          source: source
+    params:
+      weekend_days: [6, 7]                               # ISO weekday numbers: Saturday, Sunday
+      holiday_file: ../sample_data/holidays_my_2025.yaml # illustrative sample; supply your own
+      round_to: "1000"                                   # multiples of this amount ...
+      min_amount: "10000"                                # ... at or above this size are "round"
