@@ -1,0 +1,28 @@
+id: JE-01
+name: Unusual journal postings
+objective: >
+  Identify journal lines posted on a weekend or public holiday, and lines with
+  large round amounts.
+assertion: occurrence
+risk: >
+  Manual or fraudulent journals are often posted outside normal working days or
+  use estimated round amounts (management override of controls).
+category: analytical
+contract:
+  lines:
+    required: {je_id: string, line_no: integer, posting_date: date, amount: decimal}
+    optional: {account: string, description: string, posted_by: string, source: string}
+parameters:
+  weekend_days: {type: integer_list, default: [6, 7]}     # ISO day of week: 6 = Saturday, 7 = Sunday
+  holiday_file: {type: date_list_file, table: holidays, required: true}
+  round_to: {type: decimal, default: "1000"}
+  min_amount: {type: decimal, default: "10000"}
+amount_column: amount_at_risk
+initial_label: inquiry
+needs_client_confirmation: false
+limitations: >
+  The holiday list is supplied by the user; the sample list is illustrative and
+  covers national holidays only. Weekend and holiday postings can be legitimate
+  (automated batches, month-end close); round amounts can be legitimate
+  (transfers, fixed fees). Uses the posting date, not the entry date, when only
+  one is available.
