@@ -1,0 +1,28 @@
+id: REV-02
+name: Sequence gaps and orphans
+objective: >
+  Identify missing numbers in a document sequence, and child records (for
+  example commissions or lines) whose parent document is missing. Flag where a
+  gap and an orphan point at the same document number.
+assertion: completeness
+risk: >
+  Documents are missing from the extract or were deleted, so the population
+  tested is incomplete; orphans that match gaps suggest deleted documents.
+category: financial
+contract:
+  sequence:                     # the parent documents, e.g. sales
+    required: {id: string}
+  children:                     # records that should point at a parent, e.g. commissions
+    required: {parent_id: string}
+    optional: {amount: decimal}
+optional_roles: [children]
+parameters:
+  id_pattern: {type: string, default: '^\D*(\d+)$'}
+amount_column: amount_at_risk
+initial_label: inquiry
+needs_client_confirmation: true
+limitations: >
+  Only IDs matching the pattern are numbered; the gap test assumes numbers are
+  issued in one continuous series between the lowest and highest ID seen, so
+  gaps before the first or after the last ID are not visible. Voided documents
+  appear as gaps until the client explains them.

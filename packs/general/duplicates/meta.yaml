@@ -1,0 +1,26 @@
+id: REV-01
+name: Duplicate records
+objective: >
+  Identify records that share the same key fields and fall on the same date
+  (or within a day tolerance), which may be duplicated postings.
+assertion: occurrence
+risk: The same transaction is recorded more than once, overstating the balance.
+category: financial
+contract:
+  records:
+    required: {record_id: string, date: date}
+    optional: {amount: decimal}
+parameters:
+  key_fields: {type: field_list, role: records, default: [], min_items: 1}
+  date_tolerance_days: {type: integer, default: 0}
+amount_column: amount_at_risk
+initial_label: likely_error
+needs_client_confirmation: false
+limitations: >
+  Records with an empty value in any key field (for example a placeholder
+  customer converted to NULL) are excluded, so duplicates among them are not
+  found. With a day tolerance above 0, records are chained: each record joins the
+  group if it is within the tolerance of the previous record in date order, so a
+  group can span more than the tolerance. Genuine repeat purchases look the same
+  as duplicates; each group needs inquiry. Amount at risk is counted only on the
+  second and later records of a group.
